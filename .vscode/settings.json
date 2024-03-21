@@ -2,6 +2,7 @@
     "files.associations": {
         "in.h": "c",
         "unistd.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "webServer.C": "cpp"
     }
 }
