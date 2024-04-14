@@ -3,6 +3,8 @@
         "in.h": "c",
         "unistd.h": "c",
         "stdio.h": "c",
-        "webServer.C": "cpp"
+        "webServer.C": "cpp",
+        "time.h": "c",
+        "md5.h": "c"
     }
 }
