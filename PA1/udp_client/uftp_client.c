@@ -1,3 +1,9 @@
+/*
+	Author: Nathan Herrington
+	Date: 2023-02-20
+	Description: Simple UDP client for CSCI 4273 PA1
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

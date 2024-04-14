@@ -1,5 +1,7 @@
 /*
-	C socket server example, handles multiple clients using threads
+	Author: Nathan Herrington
+	Date: 2023-03-20
+	Description: Simple TCP web server for CSCI 4273 PA3
 */
 
 #include<stdio.h>
@@ -15,6 +17,7 @@
 //the thread function
 void *connection_handler(void *);
 
+// Main function from https://www.binarytides.com/server-client-example-c-sockets-linux/ with minor modifications
 int main(int argc , char *argv[])
 {
     int portNum = 0;
