@@ -30,8 +30,8 @@ struct threadGet {
     char *filename;
     char *part1;
     char *part2;
-    char part1Size[10];
-    char part2Size[10];
+    char part1Size[100];
+    char part2Size[100];
     int error;
 };
 
@@ -166,22 +166,24 @@ int main(int argc , char *argv[]) {
         }
 
         // Combine parts
-        FILE *outputFile = fopen(argv[2], "wb");
+        FILE *outputFile = fopen(argv[2], "w");
         if (outputFile == NULL) {
             printf("Error: Could not open file for writing\n");
             return 1;
+        }
+        // print part map
+        for (int i = 0; i < 4; i++) {
+            printf("%d %d %d %d\n", partMap[i][0], partMap[i][1], partMap[i][2], partMap[i][3]);
         }
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 4; j++) {
                 if (partMap[j][i] == 1) {
                     fwrite(inputStructsArr[j]->part1, 1, atoi(inputStructsArr[j]->part1Size), outputFile);
-                    printf("Writing part %d\n", i);
-                    printf("Size %d\n", atoi(inputStructsArr[j]->part1Size));
+                    printf("Part 1 size: %d\n", atoi(inputStructsArr[j]->part1Size));
                     break;
                 } else if (partMap[j][i] == 2) {
                     fwrite(inputStructsArr[j]->part2, 1, atoi(inputStructsArr[j]->part2Size), outputFile);
-                    printf("Writing part %d\n", i);
-                    printf("Size %d\n", atoi(inputStructsArr[j]->part2Size));
+                    printf("Part 2 size: %d\n", atoi(inputStructsArr[j]->part2Size));
                     break;
                 }
             }
@@ -353,7 +355,7 @@ void *getThread(void *inputStruct) {
     }
 
     // Send GET request
-    // Format: GET filename <filename>
+    // Format: GET <filename>
     message = (char*) malloc(100);
     strcpy(message, "GET ");
     strcat(message, input->filename);
@@ -375,15 +377,14 @@ void *getThread(void *inputStruct) {
         input->error = 3;
         return 0;
     }
-    printf("message: %s\n", message);
     char *part1, *part2;
     strtok(message, " ");
     part1 = strtok(NULL, " ");
     strcpy(input->part1Size, strtok(NULL, " "));
     part2 = strtok(NULL, " ");
     strcpy(input->part2Size, strtok(NULL, " "));
-    partMap[input->ID][atoi(part1)] = 1;
-    partMap[input->ID][atoi(part2)] = 2;
+    partMap[input->ID][atoi(part1) - 1] = 1;
+    partMap[input->ID][atoi(part2) - 1] = 2;
     free(message);
     // Send ACK
     message = (char*) malloc(100);
@@ -392,7 +393,9 @@ void *getThread(void *inputStruct) {
     free(message);
     // Receive part 1
     input->part1 = (char*) malloc(atoi(input->part1Size));
-    recv(client_socket, input->part1, atoi(input->part1Size), 0);
+    printf("Part 1 before size: %d\n", atoi(input->part1Size));
+    sprintf(input->part1Size, "%ld", recv(client_socket, input->part1, atoi(input->part1Size), 0));
+    printf("Part 1 after size: %d\n", atoi(input->part1Size));
 
     // Send ACK
     message = (char*) malloc(100);
@@ -402,7 +405,8 @@ void *getThread(void *inputStruct) {
 
     // Receive part 2
     input->part2 = (char*) malloc(atoi(input->part2Size));
-    recv(client_socket, input->part2, atoi(input->part2Size), 0);
+    // recv(client_socket, input->part2, atoi(input->part2Size), 0);
+    sprintf(input->part2Size, "%ld", recv(client_socket, input->part2, atoi(input->part2Size), 0));
     close(client_socket);
     return 0;
 }
