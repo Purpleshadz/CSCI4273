@@ -1,7 +1,8 @@
 /*
 	Author: Nathan Herrington
-	Date: 2023-04-14
+	Date: 2024-04-14
 	Description: Simple proxy server for CSCI 4273 PA3
+				 gcc proxyServer.c dnsCache.c -o server -lpthread -lssl -lcrypto
 */
 
 #include<stdio.h>
@@ -19,15 +20,25 @@
 //the thread function
 void *connection_handler(void *);
 
+int timeout;
+pthread_mutex_t cacheMutex;
+
 // Main function from https://www.binarytides.com/server-client-example-c-sockets-linux/ with minor modifications
 int main(int argc , char *argv[])
 {
     int portNum = 0;
-    if (argc != 2) {
+    if ((argc != 2) && (argc != 3)) {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
         exit(1);
     }
     portNum = atoi(argv[1]);
+	if (argc == 3) {
+		timeout = atoi(argv[2]);
+	} else {
+		timeout = 60;
+	}
+
+	pthread_mutex_init(&cacheMutex, NULL);
 
 	int socket_desc , client_sock , c , *new_sock;
 	struct sockaddr_in server , client;
@@ -96,8 +107,8 @@ void *connection_handler(void *socket_desc)
 {
 	//Get the socket descriptor
 	int sock1= *(int*)socket_desc;
-	int read_size;
-	char *message , client_message[2000], *fileContents;
+	int readSize;
+	char *message , client_message[20000], *fileContents;
 	char cmd[10];
 	char url[200];
 	char urlCopy[200];
@@ -105,14 +116,13 @@ void *connection_handler(void *socket_desc)
 	char fileDirectory[100];
 	message = (char*) malloc(200);
 	FILE *file;
-	char fileType[70];
 
 	pthread_detach(pthread_self());
 
 	// Read HTTP request 
-	read_size = recv(sock1, client_message , sizeof(client_message) , 0);
+	readSize = recv(sock1, client_message , sizeof(client_message) , 0);
 	int requestError = sscanf(client_message, "%s %s %s\r\n", cmd, url, version);
-	strcpy(urlCopy, cmd);
+	strcpy(urlCopy, url);
 
 	if (!strcmp(cmd, "") || !strcmp(url, "") || !strcmp(cmd, "")) {
 		// Error parsing the request, send 400 Bad Request response
@@ -164,6 +174,16 @@ void *connection_handler(void *socket_desc)
 	}
 
 	// Open and read blocklist file
+	if(access("blocklist", F_OK) == -1){
+		printf("No blocklist found\n");
+		strcpy(message, version);
+		strcat(message, " 500 Internal Server Error\r\nContent-Type: \r\nContent-Length: \r\n\r\n");
+		write(sock1, message, strlen(message));
+		close(sock1);
+		free(message);
+		free(socket_desc);
+		return 0;
+  	}
 	file = fopen("blocklist", "r");
 	if (file == NULL) {
 		// Error opening blocklist file
@@ -182,6 +202,7 @@ void *connection_handler(void *socket_desc)
 	while (fgets(blocklist, sizeof(blocklist), file)) {
 		if (strstr(website, blocklist) != NULL) {
 			// Website is in blocklist, send 403 Forbidden response
+			printf("Website is in blocklist\n");
 			strcpy(message, version);
 			strcat(message, " 403 Forbidden\r\nContent-Type: \r\nContent-Length: \r\n\r\n");
 			write(sock1, message, strlen(message));
@@ -195,11 +216,13 @@ void *connection_handler(void *socket_desc)
 	// Check if url has dynamic options
 	if (strchr(url, '?') == NULL) {
 		// No dynamic options found, look in cache
-		if (checkHash(url, 60)) {
+		long int num;
+		pthread_mutex_lock(&cacheMutex);
+		if ((num = checkHash(urlCopy, timeout)) != -1) {
 			// Found in cache, send message from cache
-			char* fileName = (char*)malloc(60);
-			strcpy(fileName, "cache/");
-			strcat(fileName, url);
+			printf("Found in cache\n");
+			char fileName[256];
+			sprintf(fileName, "cache/%li", num);
 			file = fopen(fileName, "r");
 			fseek(file, 0, SEEK_END);
 			int fileSize = ftell(file);
@@ -214,8 +237,10 @@ void *connection_handler(void *socket_desc)
 			free(fileContents);
 			free(message);
 			free(socket_desc);
+			pthread_mutex_unlock(&cacheMutex);
 			return NULL;
 		}
+		pthread_mutex_unlock(&cacheMutex);
 	}
 
 	// Make second socket
@@ -237,27 +262,71 @@ void *connection_handler(void *socket_desc)
 		free(socket_desc);
 		return NULL;
 	}
-
+	printf("Connected to website\n");
 	// Send request to website
 	write(sock2, client_message, strlen(client_message));
 
-	// Read response from website
-	read_size = recv(sock2, client_message, sizeof(client_message), 0);
-	if (read_size < 0) {
-		// Error reading response from website
-		printf("Error reading response from website\n");
-		strcpy(message, version);
-		strcat(message, " 500 Internal Server Error\r\nContent-Type: \r\nContent-Length: \r\n\r\n");
-		write(sock1, message, strlen(message));
-		close(sock1);
-		free(message);
-		free(socket_desc);
-		return NULL;
+	// Send response to client
+	int totalSize = 0;
+	printf("sending back respeonse\n");
+	char fileName[256] = "none";
+	int fileSize = -1;
+	while (totalSize < fileSize || fileSize == -1) {
+		readSize = recv(sock2, client_message, sizeof(client_message), 0);
+		totalSize += readSize;
+		write(sock1, client_message, readSize);
+		if (fileSize == -1) {
+			// Get file size
+			char* contentLength = strstr(client_message, "Content-Length: ");
+			if (contentLength != NULL) {
+				contentLength += 16;
+				char* end = strstr(contentLength, "\r\n");
+				char length[10];
+				memcpy(length, contentLength, end - contentLength);
+				length[end - contentLength] = '\0';
+				fileSize = atoi(length);
+			} else {
+				printf("Nonstandard packet received");
+				close(sock1);
+				close(sock2);
+				free(message);
+				free(socket_desc);
+				return NULL;
+			}
+		}
+
+		// Add file to cache if no dynamic options
+		if (strchr(url, '?') == NULL) {
+			// Strip http:// from url
+			pthread_mutex_lock(&cacheMutex);
+			// Add to cache
+			if (!strcmp(fileName, "none")) {
+				sprintf(fileName, "cache/%li", addHash(urlCopy));
+				// printf("client_message: %s\n", client_message);
+				file = fopen(fileName, "wb");
+				if (file == NULL) {
+					printf("Error opening file: %s\n", fileName);
+					pthread_mutex_unlock(&cacheMutex);
+					close(sock1);
+					close(sock2);
+					free(message);
+					free(socket_desc);
+					return NULL;
+				}
+				printf("Adding to cache: %s\n", fileName);
+			}
+			// Create file in cache folder
+			fwrite(client_message, 1, readSize, file);
+			pthread_mutex_unlock(&cacheMutex);
+		}
+	}
+	if (strcmp(fileName, "none")) {
+		fclose(file);
+		memset(fileName, 0, sizeof(fileName));
+		strcpy(fileName, "none");
 	}
 
-	// Send response to client
-	write(sock1, client_message, strlen(client_message));
-
+	// Close sockets and free memory
 	close(sock1);
 	close(sock2);
 	free(message);

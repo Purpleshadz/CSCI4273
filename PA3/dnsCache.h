@@ -6,12 +6,12 @@
 
 struct node {
     unsigned char hash[16];
-    char url[50];
+    char url[256];
     struct node* next;
     struct node* previous;
     struct timeval *creationTime;
 };
 
-void addHash(char* url);
+long int addHash(char* url);
 
-int checkHash(char* url, int timeout);
+long int checkHash(char* url, int timeout);
