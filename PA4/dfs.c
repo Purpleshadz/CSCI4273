@@ -132,8 +132,8 @@ void *connection_handler(void *socket_desc)
     chdir(fileDirectory);
 
 	if (!strncmp(client_message, "GET", 3)) {
-        // GET request structure GET filename <filename>
-        sscanf(requestDetails, "filename %s", fileName);
+        // GET request structure GET <filename>
+        printf("GET request for file: %s\n", requestDetails);
         
         // Check if file with  filename fileList exist in fileDirectory
         pthread_mutex_lock(&fileListMutex);
@@ -150,12 +150,19 @@ void *connection_handler(void *socket_desc)
             return NULL;
         }
 
+        char *getFileListName, *getPart1, *getPart1Size, *getPart2, *getPart2Size;
+
         // Check if file exists in fileList
         char fileLine[110];
         int fileFound = 0;
         while (fgets(fileLine, 110, fileList)) {
-            sscanf(fileLine, "%s,%s,%s,%s,%s", fileListName, part1, part1Size, part2, part2Size);
-            if (!strncmp(fileListName, fileName, strlen(fileName))) {
+            // sscanf(fileLine, "%s,%s,%s,%s,%s", fileListName, part1, part1Size, part2, part2Size);
+            getFileListName = strtok(fileLine, ",");
+            getPart1 = strtok(NULL, ",");
+            getPart1Size = strtok(NULL, ",");
+            getPart2 = strtok(NULL, ",");
+            getPart2Size = strtok(NULL, ",");
+            if (!strncmp(getFileListName, requestDetails, strlen(requestDetails))) {
                 fileFound = 1;
                 break;
             }
@@ -176,14 +183,8 @@ void *connection_handler(void *socket_desc)
             // File found in fileList, send parts of file ACK <part1> <part1Size> <part2> <part2Size>
             printf("File found in fileList\n");
             message = (char*) malloc(100);
-            strcpy(message, "ACK ");
-            strcat(message, part1);
-            strcat(message, " ");
-            strcat(message, part1Size);
-            strcat(message, " ");
-            strcat(message, part2);
-            strcat(message, " ");
-            strcat(message, part2Size);
+            sprintf(message, "ACK %s %s %s %s", getPart1, getPart1Size, getPart2, getPart2Size);   
+            printf("Message: %s\n", message);
             write(sock, message, strlen(message));
         }
 
@@ -202,80 +203,74 @@ void *connection_handler(void *socket_desc)
             return NULL;
         }
 
-        // Check if client needs part 1
-        if (client_message[4] == '1') {
-            // Send part 1
-            char part1FileName[101];
-            strcpy(part1FileName, fileName);
-            strcat(part1FileName, part1);
-            file1 = fopen(part1FileName, "rb");
-            if (!file1) {
-                // Part 1 not found
-                printf("Part 1 not found\n");
-                message = (char*) malloc(100);
-                strcpy(message, "ACK ERROR");
-                write(sock, message, strlen(message));
-                close(sock);
-                free(message);
-                free(socket_desc);
-                return NULL;
-            }
-            // Read file
-            fileContents = (char*) malloc(atoi(part1Size) * sizeof(char));
-            readResult = 0;
-            if (fileContents) {
-                readResult = fread(fileContents, 1, atoi(part1Size), file1);
-            }
-
-            write(sock , fileContents , readResult);
-            printf("Part 1 Sent\n");
-            fclose(file1);
-            free(fileContents);
-
-            // Wait for ACK from client to continue
-            read_size = recv(sock , client_message , sizeof(client_message) , 0);
-            if (strncmp(client_message, "ACK", 3)) {
-                // Bad request received
-                printf("Bad request received\n");
-                message = (char*) malloc(100);
-                strcpy(message, "400 Bad Request");
-                write(sock, message, strlen(message));
-                close(sock);
-                free(message);
-                free(socket_desc);
-                return NULL;
-            }
+        // Send part 1
+        char part1FileName[101];
+        strcpy(part1FileName, fileName);
+        strcat(part1FileName, part1);
+        file1 = fopen(part1FileName, "rb");
+        if (!file1) {
+            // Part 1 not found
+            printf("Part 1 not found\n");
+            message = (char*) malloc(100);
+            strcpy(message, "ACK ERROR");
+            write(sock, message, strlen(message));
+            close(sock);
+            free(message);
+            free(socket_desc);
+            return NULL;
+        }
+        // Read file
+        fileContents = (char*) malloc(atoi(part1Size) * sizeof(char));
+        readResult = 0;
+        if (fileContents) {
+            readResult = fread(fileContents, 1, atoi(part1Size), file1);
         }
 
-        // Check if client needs part 2
-        if (client_message[6] == '1') {
-            // Send part 2
-            char part2FileName[101];
-            strcpy(part2FileName, fileName);
-            strcat(part2FileName, part2);
-            file2 = fopen(part2FileName, "rb");
-            if (!file2) {
-                // Part 2 not found
-                printf("Part 2 not found\n");
-                message = (char*) malloc(100);
-                strcpy(message, "ACK ERROR");
-                write(sock, message, strlen(message));
-                close(sock);
-                free(message);
-                free(socket_desc);
-                return NULL;
-            }
-            // Read file
-            fileContents = (char*) malloc(atoi(part2Size) * sizeof(char));
-            readResult = 0;
-            if (fileContents) {
-                readResult = fread(fileContents, 1, atoi(part2Size), file2);
-            }
-            write(sock , fileContents , readResult);
-            printf("Part 2 Sent\n");
-            fclose(file2);
-            free(fileContents);
+        write(sock , fileContents , readResult);
+        printf("Part 1 Sent\n");
+        fclose(file1);
+        free(fileContents);
+
+        // Wait for ACK from client to continue
+        read_size = recv(sock , client_message , sizeof(client_message) , 0);
+        if (strncmp(client_message, "ACK", 3)) {
+            // Bad request received
+            printf("Bad request received\n");
+            message = (char*) malloc(100);
+            strcpy(message, "400 Bad Request");
+            write(sock, message, strlen(message));
+            close(sock);
+            free(message);
+            free(socket_desc);
+            return NULL;
         }
+
+        // Send part 2
+        char part2FileName[101];
+        strcpy(part2FileName, fileName);
+        strcat(part2FileName, part2);
+        file2 = fopen(part2FileName, "rb");
+        if (!file2) {
+            // Part 2 not found
+            printf("Part 2 not found\n");
+            message = (char*) malloc(100);
+            strcpy(message, "ACK ERROR");
+            write(sock, message, strlen(message));
+            close(sock);
+            free(message);
+            free(socket_desc);
+            return NULL;
+        }
+        // Read file
+        fileContents = (char*) malloc(atoi(part2Size) * sizeof(char));
+        readResult = 0;
+        if (fileContents) {
+            readResult = fread(fileContents, 1, atoi(part2Size), file2);
+        }
+        write(sock , fileContents , readResult);
+        printf("Part 2 Sent\n");
+        fclose(file2);
+        free(fileContents);
         close(sock);
         free(socket_desc);
         return NULL;

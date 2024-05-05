@@ -30,10 +30,9 @@ struct threadGet {
     char *filename;
     char *part1;
     char *part2;
-    int part1Size;
-    int part2Size;
+    char part1Size[10];
+    char part2Size[10];
     int error;
-    int serverPort;
 };
 
 struct threadPut {
@@ -45,7 +44,6 @@ struct threadPut {
     int part1Size;
     int part2Size;
     int error;
-    int serverPort;
     int part1Num;
     int part2Num;
 };
@@ -54,7 +52,6 @@ struct threadList {
     int ID;
     char serverIP[16];
     int error;
-    int serverPort;
 };
 
 struct node {
@@ -134,10 +131,8 @@ int main(int argc , char *argv[]) {
         for (int i = 0; i < 4; i++) {
             inputStructsArr[i] = malloc(sizeof(struct threadGet));
             inputStructsArr[i]->ID = i;
-            sscanf(IPs[i], "%s:%d", inputStructsArr[i]->serverIP, &inputStructsArr[i]->serverPort);
+            strcpy(inputStructsArr[i]->serverIP, IPs[i]);
             inputStructsArr[i]->filename = argv[2];
-            inputStructsArr[i]->part1Size = 0;
-            inputStructsArr[i]->part2Size = 0;
             inputStructsArr[i]->error = 0;
             pthread_create(&threads[i], NULL, getThread, (void *) inputStructsArr[i]);
         }
@@ -179,10 +174,14 @@ int main(int argc , char *argv[]) {
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 4; j++) {
                 if (partMap[j][i] == 1) {
-                    fwrite(inputStructsArr[j]->part1, 1, inputStructsArr[j]->part1Size, outputFile);
+                    fwrite(inputStructsArr[j]->part1, 1, atoi(inputStructsArr[j]->part1Size), outputFile);
+                    printf("Writing part %d\n", i);
+                    printf("Size %d\n", atoi(inputStructsArr[j]->part1Size));
                     break;
                 } else if (partMap[j][i] == 2) {
-                    fwrite(inputStructsArr[j]->part2, 1, inputStructsArr[j]->part2Size, outputFile);
+                    fwrite(inputStructsArr[j]->part2, 1, atoi(inputStructsArr[j]->part2Size), outputFile);
+                    printf("Writing part %d\n", i);
+                    printf("Size %d\n", atoi(inputStructsArr[j]->part2Size));
                     break;
                 }
             }
@@ -289,7 +288,7 @@ int main(int argc , char *argv[]) {
         for (int i = 0; i < 4; i++) {
             inputStructsArr[i] = malloc(sizeof(struct threadList));
             inputStructsArr[i]->ID = i;
-            sscanf(IPs[i], "%s:%d", inputStructsArr[i]->serverIP, &inputStructsArr[i]->serverPort);
+            strcpy(inputStructsArr[i]->serverIP, IPs[i]);
             inputStructsArr[i]->error = 0;
             pthread_create(&threads[i], NULL, listThread, (void *) inputStructsArr[i]);
         }
@@ -342,23 +341,21 @@ void *getThread(void *inputStruct) {
     struct timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 0;
-    fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) | O_NONBLOCK);
     connect(client_socket, (struct sockaddr *) &server_address, sizeof(server_address));
     FD_ZERO(&sock); 
     FD_SET(client_socket, &sock); 
-    int selectReturn = select(client_socket + 1, &sock, NULL, NULL, &tv);
+    int selectReturn = select(client_socket + 1, NULL, &sock, NULL, &tv);
     if (selectReturn <= 0) {
         // Timeout reached, set error flag and return
+        printf("Timeout %d\n", selectReturn);
         input->error = 1;
         return 0;
     }
-    // Reset socket to blocking
-    fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) & (~O_NONBLOCK));
 
     // Send GET request
     // Format: GET filename <filename>
     message = (char*) malloc(100);
-    strcpy(message, "GET filename ");
+    strcpy(message, "GET ");
     strcat(message, input->filename);
     send(client_socket, message, strlen(message), 0);
     free(message);
@@ -367,32 +364,35 @@ void *getThread(void *inputStruct) {
     message = (char*) malloc(100);
     recv(client_socket, message, 100, 0);
 
-    if (strncmp(message, "ACK", 3) != 0) {
+    if (strncmp(message, "ACK", 3)) {
         // Error occurred, set error flag and return
         input->error = 2;
         return 0;
     }
 
-    if (strncmp(message, "ACK NULL", 8) == 0) {
+    if (!strncmp(message, "ACK NULL", 8)) {
         // File does not exist, set error flag and return
         input->error = 3;
         return 0;
     }
-    int part1, part2;
-    sscanf(message, "ACK %d %d %d %d", &part1, &input->part1Size, &part2, &input->part2Size);
-    partMap[input->ID][part1] = 1;
-    partMap[input->ID][part2] = 2;
+    printf("message: %s\n", message);
+    char *part1, *part2;
+    strtok(message, " ");
+    part1 = strtok(NULL, " ");
+    strcpy(input->part1Size, strtok(NULL, " "));
+    part2 = strtok(NULL, " ");
+    strcpy(input->part2Size, strtok(NULL, " "));
+    partMap[input->ID][atoi(part1)] = 1;
+    partMap[input->ID][atoi(part2)] = 2;
     free(message);
-
     // Send ACK
     message = (char*) malloc(100);
-    strcpy(message, "ACK 1 1");
+    strcpy(message, "ACK");
     send(client_socket, message, strlen(message), 0);
     free(message);
-
     // Receive part 1
-    input->part1 = (char*) malloc(input->part1Size);
-    recv(client_socket, input->part1, input->part1Size, 0);
+    input->part1 = (char*) malloc(atoi(input->part1Size));
+    recv(client_socket, input->part1, atoi(input->part1Size), 0);
 
     // Send ACK
     message = (char*) malloc(100);
@@ -401,8 +401,8 @@ void *getThread(void *inputStruct) {
     free(message);
 
     // Receive part 2
-    input->part2 = (char*) malloc(input->part2Size);
-    recv(client_socket, input->part2, input->part2Size, 0);
+    input->part2 = (char*) malloc(atoi(input->part2Size));
+    recv(client_socket, input->part2, atoi(input->part2Size), 0);
     close(client_socket);
     return 0;
 }
@@ -435,7 +435,6 @@ void *putThread(void *inputStruct) {
     struct timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 0;
-    // fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) | O_NONBLOCK);
     connect(client_socket, (struct sockaddr *) &server_address, sizeof(server_address));
     FD_ZERO(&sock); 
     FD_SET(client_socket, &sock); 
@@ -446,8 +445,6 @@ void *putThread(void *inputStruct) {
         input->error = 1;
         return 0;
     }
-    // // Reset socket to blocking
-    // fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) & (~O_NONBLOCK));
 
     // Send PUT request
     // PUT request structure PUT <filename> <part1num> <part1Size> <part2num> <part2Size>
@@ -481,11 +478,9 @@ void *putThread(void *inputStruct) {
     free(message);
 
     // Send Part 2
-    // printf("Sending part 2\n");
     fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) | O_NONBLOCK);
     send(client_socket, input->part2, input->part2Size, 0);
     close(client_socket);
-    // printf("Sent part 2\n");
     return 0;
 }
 
@@ -521,7 +516,7 @@ void *listThread(void *inputStruct) {
     connect(client_socket, (struct sockaddr *) &server_address, sizeof(server_address));
     FD_ZERO(&sock); 
     FD_SET(client_socket, &sock); 
-    int selectReturn = select(client_socket + 1, &sock, NULL, NULL, &tv);
+    int selectReturn = select(client_socket + 1, NULL, &sock, NULL, &tv);
     if (selectReturn <= 0) {
         // Timeout reached, set error flag and return
         input->error = 1;
