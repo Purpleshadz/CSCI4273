@@ -270,9 +270,11 @@ int main(int argc , char *argv[]) {
                 inputStructsArr[j]->part2Num = partSplitTable[x][j][1];
                 pthread_create(&threads[j], NULL, putThread, (void *) inputStructsArr[j]);
             }
+            printf("Waiting for threads to finish\n");
             for (int j = 0; j < 4; j++) {
                 pthread_join(threads[j], NULL);
             }
+            printf("Threads finished\n");
             free (fileBuffer);
             for (int j = 0; j < 4; j++) {
                 free(inputStructsArr[j]->part1);
@@ -308,7 +310,7 @@ int main(int argc , char *argv[]) {
             free(inputStructsArr[i]);
         }
     }
-
+    return 0;
 
 }
 
@@ -401,7 +403,7 @@ void *getThread(void *inputStruct) {
     // Receive part 2
     input->part2 = (char*) malloc(input->part2Size);
     recv(client_socket, input->part2, input->part2Size, 0);
-    
+    close(client_socket);
     return 0;
 }
 
@@ -444,18 +446,14 @@ void *putThread(void *inputStruct) {
         input->error = 1;
         return 0;
     }
-    // Reset socket to blocking
+    // // Reset socket to blocking
     // fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) & (~O_NONBLOCK));
-
-    printf("serverPort: %s\n", port);
-    printf("serverIP: %s\n", IP);
 
     // Send PUT request
     // PUT request structure PUT <filename> <part1num> <part1Size> <part2num> <part2Size>
     message = (char*) malloc(100);
     sprintf(message, "PUT %s %d %d %d %d", input->filename, input->part1Num, input->part1Size, input->part2Num, input->part2Size);
     send(client_socket, message, strlen(message), 0);
-    printf("Sent: %s\n", message);
     free(message);
 
     // Receive response
@@ -483,16 +481,11 @@ void *putThread(void *inputStruct) {
     free(message);
 
     // Send Part 2
+    // printf("Sending part 2\n");
+    fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) | O_NONBLOCK);
     send(client_socket, input->part2, input->part2Size, 0);
-    
-    // Receive ACK
-    message = (char*) malloc(100);
-    recv(client_socket, message, 100, 0);
-    if (strncmp(message, "ACK", 3) != 0) {
-        // Error occurred, set error flag and return
-        input->error = 2;
-        return 0;
-    }
+    close(client_socket);
+    // printf("Sent part 2\n");
     return 0;
 }
 
@@ -600,6 +593,6 @@ void *listThread(void *inputStruct) {
     }
     pthread_mutex_unlock(&listLock);
     free(message);
-
+    close(client_socket);
     return 0;
 }

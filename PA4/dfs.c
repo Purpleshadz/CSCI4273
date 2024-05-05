@@ -37,7 +37,7 @@ int main(int argc , char *argv[])
         fprintf(stderr, "Directory name too long\n");
         exit(1);
     }
-    strncpy(fileDirectory, argv[2], 10);
+    strncpy(fileDirectory, argv[1], 10);
 
 	int socket_desc , client_sock , c , *new_sock;
 	struct sockaddr_in server , client;
@@ -124,7 +124,7 @@ void *connection_handler(void *socket_desc)
 
 	pthread_detach(pthread_self());
 
-	// Read HTTP request 
+	// Read request from client
 	read_size = recv(sock , client_message , sizeof(client_message) , 0);
     int requestError = sscanf(client_message, "%s %s", cmd, requestDetails);
     printf("Request: %s\n", client_message);
@@ -318,58 +318,55 @@ void *connection_handler(void *socket_desc)
         return NULL;
     } else if (!strncmp(client_message, "PUT", 3)) {
         // PUT request structure PUT <filename> <part1> <part1Size> <part2> <part2Size>
-        sscanf(requestDetails, "%s %s %s %s %s", fileName, part1, part1Size, part2, part2Size);
+        char *putFileName, *putPart1, *putPart1Size, *putPart2, *putPart2Size;
+        strtok(client_message, " ");
+        putFileName = strtok(NULL, " ");
+        putPart1 = strtok(NULL, " ");
+        putPart1Size = strtok(NULL, " ");
+        putPart2 = strtok(NULL, " ");
+        putPart2Size = strtok(NULL, " ");
 
-        // Send ACK to client
-        printf("Sending ACK to client\n");
         message = (char*) malloc(100);
         strcpy(message, "ACK");
         write(sock, message, strlen(message));
         free(message);
 
         // Receive part 1
-        printf("Receiving part 1\n");
-        message = (char*) malloc(atoi(part1Size) * sizeof(char));
-        read_size = recv(sock , message , atoi(part1Size) * sizeof(char), 0);
+        message = (char*) malloc(atoi(putPart1Size) * sizeof(char));
+        read_size = recv(sock , message , atoi(putPart1Size) * sizeof(char), 0);
 
         // Write part 1 to file
-        printf("Writing part 1 to file\n");
         char part1FileName[101];
-        strcpy(part1FileName, fileName);
-        strcat(part1FileName, part1);
-        printf("Part 1 file name: %s\n", part1FileName);
+        strcpy(part1FileName, putFileName);
+        strcat(part1FileName, putPart1);
         file1 = fopen(part1FileName, "wb");
-        fwrite(message, 1, atoi(part1Size), file1);
+        fwrite(message, 1, atoi(putPart1Size), file1);
         fclose(file1);
         free(message);
 
         // Send ACK to client
-        printf("Sending ACK to client\n");
         message = (char*) malloc(100);
         strcpy(message, "ACK");
         write(sock, message, strlen(message));
         free(message);
 
         // Receive part 2
-        printf("Receiving part 2\n");
-        message = (char*) malloc(atoi(part2Size) * sizeof(char));
-        read_size = recv(sock , message , atoi(part2Size) * sizeof(char), 0);
+        message = (char*) malloc(atoi(putPart2Size) * sizeof(char));
+        read_size = recv(sock , message , atoi(putPart2Size) * sizeof(char), 0);
 
         // Write part 2 to file
-        printf("Writing part 2 to file\n");
         char part2FileName[101];
-        strcpy(part2FileName, fileName);
-        strcat(part2FileName, part2);
-        printf("Part 2 file name: %s\n", part2FileName);
+        strcpy(part2FileName, putFileName);
+        strcat(part2FileName, putPart2);
         file2 = fopen(part2FileName, "wb");
-        fwrite(message, 1, atoi(part2Size), file2);
+        fwrite(message, 1, atoi(putPart2Size), file2);
         fclose(file2);
         free(message);
 
         // Update fileList
         pthread_mutex_lock(&fileListMutex);
         fileList = fopen("fileList", "a");
-        fprintf(fileList, "%s,%s,%s,%s,%s\n", fileName, part1, part1Size, part2, part2Size);
+        fprintf(fileList, "%s,%s,%s,%s,%s\n", putFileName, putPart1, putPart1Size, putPart2, putPart2Size);
         fclose(fileList);
         pthread_mutex_unlock(&fileListMutex);
         close(sock);
