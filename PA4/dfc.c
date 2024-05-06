@@ -179,10 +179,12 @@ int main(int argc , char *argv[]) {
             for (int j = 0; j < 4; j++) {
                 if (partMap[j][i] == 1) {
                     fwrite(inputStructsArr[j]->part1, 1, atoi(inputStructsArr[j]->part1Size), outputFile);
+                    printf("ID: %d\n", j);
                     printf("Part 1 size: %d\n", atoi(inputStructsArr[j]->part1Size));
                     break;
                 } else if (partMap[j][i] == 2) {
                     fwrite(inputStructsArr[j]->part2, 1, atoi(inputStructsArr[j]->part2Size), outputFile);
+                    printf("ID: %d\n", j);
                     printf("Part 2 size: %d\n", atoi(inputStructsArr[j]->part2Size));
                     break;
                 }
@@ -257,12 +259,12 @@ int main(int argc , char *argv[]) {
                 memcpy(inputStructsArr[j]->part1, fileBuffer + (partSize * (partSplitTable[x][j][0] - 1)), partSize);
                 memcpy(inputStructsArr[j]->part2, fileBuffer + (partSize * (partSplitTable[x][j][1] - 1)), partSize);
                 if (partSplitTable[x][j][0] == 4) {
-                    inputStructsArr[j]->part1Size = part4Size - 1;
+                    inputStructsArr[j]->part1Size = part4Size - 2;
                 } else {
                     inputStructsArr[j]->part1Size = partSize;
                 }
                 if (partSplitTable[x][j][1] == 4) {
-                    inputStructsArr[j]->part2Size = part4Size - 1;
+                    inputStructsArr[j]->part2Size = part4Size - 2;
                 } else {
                     inputStructsArr[j]->part2Size = partSize;
                 }
@@ -283,8 +285,8 @@ int main(int argc , char *argv[]) {
                 free(inputStructsArr[j]);
             }
         }
-
     } else if (strncmp(cmd, "list", 4) == 0) {
+        printf("Listing files\n");
         // List Command
         struct threadList *inputStructsArr[4];
         for (int i = 0; i < 4; i++) {
@@ -386,8 +388,6 @@ void *getThread(void *inputStruct) {
     partMap[input->ID][atoi(part1) - 1] = 1;
     partMap[input->ID][atoi(part2) - 1] = 2;
     free(message);
-    printf("Part 1 size: %s\n", input->part1Size);
-    printf("Part 2 size: %s\n", input->part2Size);
     // Send ACK
     message = (char*) malloc(100);
     strcpy(message, "ACK");
@@ -400,14 +400,10 @@ void *getThread(void *inputStruct) {
     while (totalReceived < atoi(input->part1Size)) {
         msg = (char*) malloc(1000);
         if (atoi(input->part1Size) - totalReceived < 1000) {
-            totalReceived += recv(client_socket, msg, atoi(input->part1Size) - totalReceived, 0);
-            strcat(input->part1, msg);
-            free(msg);
+            totalReceived += recv(client_socket, input->part1 + totalReceived, atoi(input->part1Size) - totalReceived, 0);
             break;
         } else {
-            totalReceived += recv(client_socket, msg, 1000, 0);
-            strcat(input->part1, msg);
-            free(msg);
+            totalReceived += recv(client_socket, input->part1 + totalReceived, 1000, 0);
         }
     }
 
@@ -421,16 +417,11 @@ void *getThread(void *inputStruct) {
     input->part2 = (char*) malloc(atoi(input->part2Size) );
     totalReceived = 0;
     while (totalReceived < atoi(input->part2Size)) {
-        msg = (char*) malloc(1000);
         if (atoi(input->part2Size) - totalReceived < 1000) {
-            totalReceived += recv(client_socket, msg, atoi(input->part2Size) - totalReceived, 0);
-            strcat(input->part2, msg);
-            free(msg);
+            totalReceived += recv(client_socket, input->part2 + totalReceived, atoi(input->part2Size) - totalReceived, 0);
             break;
         } else {
-            totalReceived += recv(client_socket, msg, 1000, 0);
-            strcat(input->part2, msg);
-            free(msg);
+            totalReceived += recv(client_socket, input->part2 + totalReceived, 1000, 0);
         }
     }
 
@@ -499,7 +490,15 @@ void *putThread(void *inputStruct) {
     int totalSent = 0;
     while (totalSent < input->part1Size) {
         if (input->part1Size - totalSent < 1000) {
-            totalSent += send(client_socket, input->part1 + totalSent, input->part1Size - totalSent, 0);
+            if (input->part1Num == 4) {
+                message = (char*) malloc(input->part1Size - totalSent + 1);
+                memcpy(message, input->part1 + totalSent, input->part1Size - totalSent);
+                memcpy(message + input->part1Size - totalSent, "\0", 1);
+                totalSent += send(client_socket, message, input->part1Size - totalSent, 0);
+                free(message);
+            } else {
+                totalSent += send(client_socket, input->part1 + totalSent, input->part1Size - totalSent, 0);
+            }
             break;
         } else {
             totalSent += send(client_socket, input->part1 + totalSent, 1000, 0);
@@ -521,7 +520,15 @@ void *putThread(void *inputStruct) {
     totalSent = 0;
     while (totalSent < input->part2Size) {
         if (input->part2Size - totalSent < 1000) {
-            totalSent += send(client_socket, input->part2 + totalSent, input->part2Size - totalSent, 0);
+            if (input->part2Num == 4) {
+                message = (char*) malloc(input->part2Size - totalSent + 1);
+                memcpy(message, input->part2 + totalSent, input->part2Size - totalSent);
+                memcpy(message + input->part2Size - totalSent, "\0", 1);
+                totalSent += send(client_socket, message, input->part2Size - totalSent, 0);
+                free(message);
+            } else {
+                totalSent += send(client_socket, input->part2 + totalSent, input->part2Size - totalSent, 0);
+            }
             break;
         } else {
             totalSent += send(client_socket, input->part2 + totalSent, 1000, 0);
@@ -561,7 +568,6 @@ void *listThread(void *inputStruct) {
     tv.tv_sec = 1;
     tv.tv_usec = 0;
     fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) | O_NONBLOCK);
-    connect(client_socket, (struct sockaddr *) &server_address, sizeof(server_address));
     FD_ZERO(&sock); 
     FD_SET(client_socket, &sock); 
     int selectReturn = select(client_socket + 1, NULL, &sock, NULL, &tv);
@@ -571,12 +577,12 @@ void *listThread(void *inputStruct) {
         return 0;
     }
     // Reset socket to blocking
-    fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) & (~O_NONBLOCK));
 
     // Send LIST request
     // Format: LIST
     message = (char*) malloc(100);
     strcpy(message, "LIST");
+    printf("message: %s\n", message);
     send(client_socket, message, strlen(message), 0);
     free(message);
 
@@ -584,6 +590,7 @@ void *listThread(void *inputStruct) {
     // <filename1>,<part1>,<part2>|<filename2>,<part1>,<part2>|...
     message = (char*) malloc(1000);
     recv(client_socket, message, 1000, 0);
+    printf("message: %s\n", message);
     
     // Parse response into linked list
     pthread_mutex_lock(&listLock);

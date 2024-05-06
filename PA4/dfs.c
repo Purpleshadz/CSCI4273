@@ -229,7 +229,6 @@ void *connection_handler(void *socket_desc)
             }
         }
 
-        write(sock , fileContents , readResult);
         fclose(file1);
         free(fileContents);
 
@@ -259,11 +258,12 @@ void *connection_handler(void *socket_desc)
         if (fileContents) {
             readResult = fread(fileContents, 1, atoi(getPart2Size), file2);
         }
+        totalSent = 0;
         // write(sock , fileContents , readResult);
-        while (totalSent < atoi(getPart1Size)) {
-            if (atoi(getPart1Size) - totalSent < 1000) {
-                write(sock , fileContents + totalSent , atoi(getPart1Size) - totalSent);
-                totalSent += atoi(getPart1Size) - totalSent;
+        while (totalSent < atoi(getPart2Size)) {
+            if (atoi(getPart2Size) - totalSent < 1000) {
+                write(sock , fileContents + totalSent , atoi(getPart2Size) - totalSent);
+                totalSent += atoi(getPart2Size) - totalSent;
                 break;
             } else {
                 write(sock , fileContents + totalSent , 1000);
@@ -372,7 +372,7 @@ void *connection_handler(void *socket_desc)
             totalDownloaded += read_size;
         }
         fclose(file2);
-
+        free(message);
         // Update fileList
         pthread_mutex_lock(&fileListMutex);
         fileList = fopen("fileList", "a");
