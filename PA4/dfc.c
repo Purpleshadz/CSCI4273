@@ -257,12 +257,12 @@ int main(int argc , char *argv[]) {
                 memcpy(inputStructsArr[j]->part1, fileBuffer + (partSize * (partSplitTable[x][j][0] - 1)), partSize);
                 memcpy(inputStructsArr[j]->part2, fileBuffer + (partSize * (partSplitTable[x][j][1] - 1)), partSize);
                 if (partSplitTable[x][j][0] == 4) {
-                    inputStructsArr[j]->part1Size = part4Size;
+                    inputStructsArr[j]->part1Size = part4Size - 1;
                 } else {
                     inputStructsArr[j]->part1Size = partSize;
                 }
                 if (partSplitTable[x][j][1] == 4) {
-                    inputStructsArr[j]->part2Size = part4Size;
+                    inputStructsArr[j]->part2Size = part4Size - 1;
                 } else {
                     inputStructsArr[j]->part2Size = partSize;
                 }
@@ -386,16 +386,30 @@ void *getThread(void *inputStruct) {
     partMap[input->ID][atoi(part1) - 1] = 1;
     partMap[input->ID][atoi(part2) - 1] = 2;
     free(message);
+    printf("Part 1 size: %s\n", input->part1Size);
+    printf("Part 2 size: %s\n", input->part2Size);
     // Send ACK
     message = (char*) malloc(100);
     strcpy(message, "ACK");
     send(client_socket, message, strlen(message), 0);
     free(message);
     // Receive part 1
-    input->part1 = (char*) malloc(atoi(input->part1Size));
-    printf("Part 1 before size: %d\n", atoi(input->part1Size));
-    sprintf(input->part1Size, "%ld", recv(client_socket, input->part1, atoi(input->part1Size), 0));
-    printf("Part 1 after size: %d\n", atoi(input->part1Size));
+    char *msg;
+    input->part1 = (char*) malloc(atoi(input->part1Size) * sizeof(char));
+    int totalReceived = 0;
+    while (totalReceived < atoi(input->part1Size)) {
+        msg = (char*) malloc(1000);
+        if (atoi(input->part1Size) - totalReceived < 1000) {
+            totalReceived += recv(client_socket, msg, atoi(input->part1Size) - totalReceived, 0);
+            strcat(input->part1, msg);
+            free(msg);
+            break;
+        } else {
+            totalReceived += recv(client_socket, msg, 1000, 0);
+            strcat(input->part1, msg);
+            free(msg);
+        }
+    }
 
     // Send ACK
     message = (char*) malloc(100);
@@ -404,9 +418,22 @@ void *getThread(void *inputStruct) {
     free(message);
 
     // Receive part 2
-    input->part2 = (char*) malloc(atoi(input->part2Size));
-    // recv(client_socket, input->part2, atoi(input->part2Size), 0);
-    sprintf(input->part2Size, "%ld", recv(client_socket, input->part2, atoi(input->part2Size), 0));
+    input->part2 = (char*) malloc(atoi(input->part2Size) );
+    totalReceived = 0;
+    while (totalReceived < atoi(input->part2Size)) {
+        msg = (char*) malloc(1000);
+        if (atoi(input->part2Size) - totalReceived < 1000) {
+            totalReceived += recv(client_socket, msg, atoi(input->part2Size) - totalReceived, 0);
+            strcat(input->part2, msg);
+            free(msg);
+            break;
+        } else {
+            totalReceived += recv(client_socket, msg, 1000, 0);
+            strcat(input->part2, msg);
+            free(msg);
+        }
+    }
+
     close(client_socket);
     return 0;
 }
@@ -469,7 +496,15 @@ void *putThread(void *inputStruct) {
     free(message);
 
     // Send Part 1
-    send(client_socket, input->part1, input->part1Size, 0);
+    int totalSent = 0;
+    while (totalSent < input->part1Size) {
+        if (input->part1Size - totalSent < 1000) {
+            totalSent += send(client_socket, input->part1 + totalSent, input->part1Size - totalSent, 0);
+            break;
+        } else {
+            totalSent += send(client_socket, input->part1 + totalSent, 1000, 0);
+        }
+    }
 
     // Receive ACK
     message = (char*) malloc(100);
@@ -482,7 +517,16 @@ void *putThread(void *inputStruct) {
     free(message);
 
     // Send Part 2
-    fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) | O_NONBLOCK);
+    // fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) | O_NONBLOCK);
+    totalSent = 0;
+    while (totalSent < input->part2Size) {
+        if (input->part2Size - totalSent < 1000) {
+            totalSent += send(client_socket, input->part2 + totalSent, input->part2Size - totalSent, 0);
+            break;
+        } else {
+            totalSent += send(client_socket, input->part2 + totalSent, 1000, 0);
+        }
+    }
     send(client_socket, input->part2, input->part2Size, 0);
     close(client_socket);
     return 0;

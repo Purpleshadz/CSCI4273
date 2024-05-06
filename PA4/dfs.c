@@ -217,6 +217,18 @@ void *connection_handler(void *socket_desc)
             readResult = fread(fileContents, 1, atoi(getPart1Size), file1);
         }
 
+        int totalSent = 0;
+        while (totalSent < atoi(getPart1Size)) {
+            if (atoi(getPart1Size) - totalSent < 1000) {
+                write(sock , fileContents + totalSent , atoi(getPart1Size) - totalSent);
+                totalSent += atoi(getPart1Size) - totalSent;
+                break;
+            } else {
+                write(sock , fileContents + totalSent , 1000);
+                totalSent += 1000;
+            }
+        }
+
         write(sock , fileContents , readResult);
         fclose(file1);
         free(fileContents);
@@ -247,7 +259,17 @@ void *connection_handler(void *socket_desc)
         if (fileContents) {
             readResult = fread(fileContents, 1, atoi(getPart2Size), file2);
         }
-        write(sock , fileContents , readResult);
+        // write(sock , fileContents , readResult);
+        while (totalSent < atoi(getPart1Size)) {
+            if (atoi(getPart1Size) - totalSent < 1000) {
+                write(sock , fileContents + totalSent , atoi(getPart1Size) - totalSent);
+                totalSent += atoi(getPart1Size) - totalSent;
+                break;
+            } else {
+                write(sock , fileContents + totalSent , 1000);
+                totalSent += 1000;
+            }
+        }
         fclose(file2);
         free(fileContents);
         close(sock);
@@ -306,18 +328,21 @@ void *connection_handler(void *socket_desc)
         free(message);
 
         int totalDownloaded = 0;
+        char part1FileName[101];
+        strcpy(part1FileName, putFileName);
+        strcat(part1FileName, putPart1);
+        file1 = fopen(part1FileName, "wb");
         while (totalDownloaded < atoi(putPart1Size)) {
-            // Receive part 1
-            message = (char*) malloc(atoi(putPart1Size) * sizeof(char));
-            read_size = recv(sock , message , atoi(putPart1Size) * sizeof(char), 0);
-
+            message = (char*) malloc(1000);
+            if (atoi(putPart1Size) - totalDownloaded < 1000) {
+                read_size = recv(sock , message , atoi(putPart1Size) - totalDownloaded, 0);
+            } else {
+                read_size = recv(sock , message , 1000, 0);
+            }
+            printf("message: %s\n", message);
             // Write part 1 to file
-            char part1FileName[101];
-            strcpy(part1FileName, putFileName);
-            strcat(part1FileName, putPart1);
-            file1 = fopen(part1FileName, "wb");
             fwrite(message, 1, read_size, file1);
-            free(message);
+            // free(message);
             totalDownloaded += read_size;
         }
         fclose(file1);
@@ -329,20 +354,24 @@ void *connection_handler(void *socket_desc)
         free(message);
 
         totalDownloaded = 0;
+        char part2FileName[101];
+        strcpy(part2FileName, putFileName);
+        strcat(part2FileName, putPart2);
+        file2 = fopen(part2FileName, "wb");
         while (totalDownloaded < atoi(putPart2Size)) {
-            // Receive part 2
-            message = (char*) malloc(atoi(putPart2Size) * sizeof(char));
-            read_size = recv(sock , message , atoi(putPart2Size) * sizeof(char), 0);
-
+            message = (char*) malloc(1000);
+            if (atoi(putPart2Size) - totalDownloaded < 1000) {
+                read_size = recv(sock , message , atoi(putPart2Size) - totalDownloaded, 0);
+            } else {
+                read_size = recv(sock , message , 1000, 0);
+            }
+            printf("message: %s\n", message);
             // Write part 2 to file
-            char part2FileName[101];
-            strcpy(part2FileName, putFileName);
-            strcat(part2FileName, putPart2);
-            file2 = fopen(part2FileName, "wb");
             fwrite(message, 1, read_size, file2);
-            free(message);
+            // free(message);
             totalDownloaded += read_size;
         }
+        fclose(file2);
 
         // Update fileList
         pthread_mutex_lock(&fileListMutex);
