@@ -296,15 +296,18 @@ void *connection_handler(void *socket_desc)
         // <filename1>,<part1>,<part2>|<filename2>,<part1>,<part2>|...
         char fileLine[110];
         char fileListMessage[1000];
+        memset(fileListMessage, 0, 1000);
         while (fgets(fileLine, 110, fileList)) {
-            char fileListName[100];
-            sscanf(fileLine, "%s,%s,%s,%s,%s", fileListName, part1, part1Size, part2, part2Size);
-            strcat(fileListMessage, fileListName);
-            strcat(fileListMessage, ",");
-            strcat(fileListMessage, part1);
-            strcat(fileListMessage, ",");
-            strcat(fileListMessage, part2);
-            strcat(fileListMessage, "|");
+            char *fileListName = strtok(fileLine, ",");
+            char *part1 = strtok(NULL, ",");
+            strtok(NULL, ",");
+            char *part2 = strtok(NULL, ",");
+            strtok(NULL, ",");
+            if (strlen(fileListMessage) == 0) {
+                sprintf(fileListMessage, "%s,%s,%s", fileListName, part1, part2);
+            } else {
+                sprintf(fileListMessage, "%s|%s,%s,%s", fileListMessage, fileListName, part1, part2);
+            }
         }
         write(sock, fileListMessage, strlen(fileListMessage));
         fclose(fileList);
@@ -375,8 +378,27 @@ void *connection_handler(void *socket_desc)
         free(message);
         // Update fileList
         pthread_mutex_lock(&fileListMutex);
-        fileList = fopen("fileList", "a");
-        fprintf(fileList, "%s,%s,%s,%s,%s\n", putFileName, putPart1, putPart1Size, putPart2, putPart2Size);
+        fileList = fopen("fileList", "r");
+        // check if file exists in fileList
+        char fileLine[110];
+        int fileFound = 0;
+        while (fgets(fileLine, 110, fileList)) {
+            char *getFileListName = strtok(fileLine, ",");
+            char *getPart1 = strtok(NULL, ",");
+            char *getPart1Size = strtok(NULL, ",");
+            char *getPart2 = strtok(NULL, ",");
+            char *getPart2Size = strtok(NULL, ",");
+            if (!strncmp(getFileListName, putFileName, strlen(putFileName))) {
+                fileFound = 1;
+                break;
+            }
+        }
+        if (!fileFound) {
+            // File not found in fileList
+            fclose(fileList);
+            fileList = fopen("fileList", "a");
+            fprintf(fileList, "%s,%s,%s,%s,%s\n", putFileName, putPart1, putPart1Size, putPart2, putPart2Size);
+        }
         fclose(fileList);
         pthread_mutex_unlock(&fileListMutex);
         close(sock);

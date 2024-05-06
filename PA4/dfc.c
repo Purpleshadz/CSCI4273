@@ -55,7 +55,7 @@ struct threadList {
 };
 
 struct node {
-    char *filename;
+    char filename[100];
     int part1;
     int part2;
     int part3;
@@ -273,20 +273,18 @@ int main(int argc , char *argv[]) {
                 inputStructsArr[j]->part2Num = partSplitTable[x][j][1];
                 pthread_create(&threads[j], NULL, putThread, (void *) inputStructsArr[j]);
             }
-            printf("Waiting for threads to finish\n");
             for (int j = 0; j < 4; j++) {
                 pthread_join(threads[j], NULL);
             }
-            printf("Threads finished\n");
             free (fileBuffer);
             for (int j = 0; j < 4; j++) {
                 free(inputStructsArr[j]->part1);
                 free(inputStructsArr[j]->part2);
                 free(inputStructsArr[j]);
             }
+            printf("File %s uploaded\n", argv[i]);
         }
     } else if (strncmp(cmd, "list", 4) == 0) {
-        printf("Listing files\n");
         // List Command
         struct threadList *inputStructsArr[4];
         for (int i = 0; i < 4; i++) {
@@ -299,6 +297,7 @@ int main(int argc , char *argv[]) {
         for (int i = 0; i < 4; i++) {
             pthread_join(threads[i], NULL);
         }
+        printf("Files:\n");
         while (head != NULL) {
             if (head->part1 == 1 && head->part2 == 1 && head->part3 == 1 && head->part4 == 1) {
                 printf("%s\n", head->filename);
@@ -544,17 +543,17 @@ void *listThread(void *inputStruct) {
     fd_set sock;
     char* message;
 
-    int client_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (client_socket == -1) {
-        perror("Socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-
     char IP[9];
     strncpy(IP, input->serverIP, 9);
 
     char port[6];
     strncpy(port, input->serverIP + 10, 5);
+
+    int client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_socket == -1) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
 
     // Specify server address
     struct sockaddr_in server_address;
@@ -567,22 +566,21 @@ void *listThread(void *inputStruct) {
     struct timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 0;
-    fcntl(client_socket, F_SETFL, fcntl(client_socket, F_GETFL, 0) | O_NONBLOCK);
+    connect(client_socket, (struct sockaddr *) &server_address, sizeof(server_address));
     FD_ZERO(&sock); 
     FD_SET(client_socket, &sock); 
     int selectReturn = select(client_socket + 1, NULL, &sock, NULL, &tv);
     if (selectReturn <= 0) {
         // Timeout reached, set error flag and return
+        printf("Timeout %d\n", selectReturn);
         input->error = 1;
         return 0;
     }
-    // Reset socket to blocking
 
     // Send LIST request
     // Format: LIST
     message = (char*) malloc(100);
     strcpy(message, "LIST");
-    printf("message: %s\n", message);
     send(client_socket, message, strlen(message), 0);
     free(message);
 
@@ -590,52 +588,57 @@ void *listThread(void *inputStruct) {
     // <filename1>,<part1>,<part2>|<filename2>,<part1>,<part2>|...
     message = (char*) malloc(1000);
     recv(client_socket, message, 1000, 0);
-    printf("message: %s\n", message);
     
     // Parse response into linked list
     pthread_mutex_lock(&listLock);
     char *token = strtok(message, "|");
-    int part1, part2;
-    char *filename;
+    char *filename, *part1, *part2;
     while (token != NULL) {
-        sscanf(token, "%s,%d,%d", filename, &part1, &part2);
+        filename = strtok(token, ",");
+        part1 = strtok(NULL, ",");
+        part2 = strtok(NULL, ",");
         struct node *current = findNode(filename);
         if (current == NULL) {
             current = (struct node*) malloc(sizeof(struct node));
-            current->filename = filename;
-            if (part1 == 1 || part2 == 1) {
+            memcpy(current->filename, filename, strlen(filename));
+            if (!strncmp(part1, "1", 1) || !strncmp(part2, "1", 1)) {
                 current->part1 = 1;
             } else {
                 current->part1 = 0;
             }
-            if (part1 == 2 || part2 == 2) {
+            if (!strncmp(part1, "2", 1)|| !strncmp(part2, "2", 1)) {
                 current->part2 = 1;
             } else {
                 current->part2 = 0;
             }
-            if (part1 == 3 || part2 == 3) {
+            if (!strncmp(part1, "3", 1) || !strncmp(part2, "3", 1)) {
                 current->part3 = 1;
             } else {
                 current->part3 = 0;
             }
-            if (part1 == 4 || part2 == 4) {
+            if (!strncmp(part1, "4", 1) || !strncmp(part2, "4", 1)) {
                 current->part4 = 1;
             } else {
                 current->part4 = 0;
             }
-            current->next = head;
-            head = current;
+            if (head == NULL) {
+                head = current;
+                head->next = NULL;
+            } else {
+                current->next = head;
+                head = current;
+            }
         } else {
-            if (part1 == 1 || part2 == 1) {
+            if (strncmp(part1, "1", 1) || strncmp(part2, "1", 1)) {
                 current->part1 = 1;
             }
-            if (part1 == 2 || part2 == 2) {
+            if (!strncmp(part1, "2", 1) || !strncmp(part2, "2", 1)) {
                 current->part2 = 1;
             }
-            if (part1 == 3 || part2 == 3) {
+            if (!strncmp(part1, "3", 1) || !strncmp(part2, "3", 1)) {
                 current->part3 = 1;
             }
-            if (part1 == 4 || part2 == 4) {
+            if (!strncmp(part1, "4", 1) || !strncmp(part2, "4", 1)) {
                 current->part4 = 1;
             }
         }
