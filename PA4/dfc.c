@@ -129,11 +129,13 @@ int main(int argc , char *argv[]) {
         // Get Command
         struct threadGet *inputStructsArr[4];
         for (int i = 0; i < 4; i++) {
+            // Create input structs
             inputStructsArr[i] = malloc(sizeof(struct threadGet));
             inputStructsArr[i]->ID = i;
             strcpy(inputStructsArr[i]->serverIP, IPs[i]);
             inputStructsArr[i]->filename = argv[2];
             inputStructsArr[i]->error = 0;
+            // Create threads
             pthread_create(&threads[i], NULL, getThread, (void *) inputStructsArr[i]);
         }
         for (int i = 0; i < 4; i++) {
@@ -171,21 +173,15 @@ int main(int argc , char *argv[]) {
             printf("Error: Could not open file for writing\n");
             return 1;
         }
-        // print part map
-        for (int i = 0; i < 4; i++) {
-            printf("%d %d %d %d\n", partMap[i][0], partMap[i][1], partMap[i][2], partMap[i][3]);
-        }
+        
+        // Write parts to file
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 4; j++) {
                 if (partMap[j][i] == 1) {
                     fwrite(inputStructsArr[j]->part1, 1, atoi(inputStructsArr[j]->part1Size), outputFile);
-                    printf("ID: %d\n", j);
-                    printf("Part 1 size: %d\n", atoi(inputStructsArr[j]->part1Size));
                     break;
                 } else if (partMap[j][i] == 2) {
                     fwrite(inputStructsArr[j]->part2, 1, atoi(inputStructsArr[j]->part2Size), outputFile);
-                    printf("ID: %d\n", j);
-                    printf("Part 2 size: %d\n", atoi(inputStructsArr[j]->part2Size));
                     break;
                 }
             }
@@ -197,8 +193,6 @@ int main(int argc , char *argv[]) {
             free(inputStructsArr[i]->part2);
             free(inputStructsArr[i]);
         }
-
-
     } else if (strncmp(cmd, "put", 3) == 0) {
         FILE *inputFile;
         struct threadPut *inputStructsArr[4];
@@ -215,7 +209,6 @@ int main(int argc , char *argv[]) {
             int fileSize = ftell(inputFile);
             fseek(inputFile, 0, SEEK_SET);
 
-            printf("Reading file %s\n", argv[i]);
             // Read file into buffer
             char *fileBuffer = (char *) malloc(fileSize);
             fread(fileBuffer, 1, fileSize, inputFile);
@@ -248,8 +241,8 @@ int main(int argc , char *argv[]) {
             int x = strtol(hashStr, NULL, 16) % 4;
 
             printf("Uploading file %s\n", argv[i]);
-            // Create input structs
             for (int j = 0; j < 4; j++) {
+                // Create input structs
                 inputStructsArr[j] = malloc(sizeof(struct threadPut));
                 inputStructsArr[j]->ID = j;
                 strcpy(inputStructsArr[j]->serverIP, IPs[j]);
@@ -288,6 +281,7 @@ int main(int argc , char *argv[]) {
         // List Command
         struct threadList *inputStructsArr[4];
         for (int i = 0; i < 4; i++) {
+            // Create input structs
             inputStructsArr[i] = malloc(sizeof(struct threadList));
             inputStructsArr[i]->ID = i;
             strcpy(inputStructsArr[i]->serverIP, IPs[i]);
@@ -299,6 +293,7 @@ int main(int argc , char *argv[]) {
         }
         printf("Files:\n");
         while (head != NULL) {
+            // Find all files with all 4 parts
             if (head->part1 == 1 && head->part2 == 1 && head->part3 == 1 && head->part4 == 1) {
                 printf("%s\n", head->filename);
             } else {

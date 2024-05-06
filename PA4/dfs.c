@@ -271,6 +271,7 @@ void *connection_handler(void *socket_desc)
             }
         }
         fclose(file2);
+        printf("File sent\n");
         free(fileContents);
         close(sock);
         free(socket_desc);
@@ -312,6 +313,7 @@ void *connection_handler(void *socket_desc)
         write(sock, fileListMessage, strlen(fileListMessage));
         fclose(fileList);
         pthread_mutex_unlock(&fileListMutex);
+        printf("File list sent\n");
         close(sock);
         free(socket_desc);
         return NULL;
@@ -342,7 +344,6 @@ void *connection_handler(void *socket_desc)
             } else {
                 read_size = recv(sock , message , 1000, 0);
             }
-            printf("message: %s\n", message);
             // Write part 1 to file
             fwrite(message, 1, read_size, file1);
             // free(message);
@@ -368,7 +369,6 @@ void *connection_handler(void *socket_desc)
             } else {
                 read_size = recv(sock , message , 1000, 0);
             }
-            printf("message: %s\n", message);
             // Write part 2 to file
             fwrite(message, 1, read_size, file2);
             // free(message);
@@ -377,30 +377,11 @@ void *connection_handler(void *socket_desc)
         fclose(file2);
         free(message);
         // Update fileList
-        pthread_mutex_lock(&fileListMutex);
-        fileList = fopen("fileList", "r");
-        // check if file exists in fileList
-        char fileLine[110];
-        int fileFound = 0;
-        while (fgets(fileLine, 110, fileList)) {
-            char *getFileListName = strtok(fileLine, ",");
-            char *getPart1 = strtok(NULL, ",");
-            char *getPart1Size = strtok(NULL, ",");
-            char *getPart2 = strtok(NULL, ",");
-            char *getPart2Size = strtok(NULL, ",");
-            if (!strncmp(getFileListName, putFileName, strlen(putFileName))) {
-                fileFound = 1;
-                break;
-            }
-        }
-        if (!fileFound) {
-            // File not found in fileList
-            fclose(fileList);
-            fileList = fopen("fileList", "a");
-            fprintf(fileList, "%s,%s,%s,%s,%s\n", putFileName, putPart1, putPart1Size, putPart2, putPart2Size);
-        }
+        printf("Updating fileList\n");
+        fileList = fopen("fileList", "a");
+        fprintf(fileList, "%s,%s,%s,%s,%s\n", putFileName, putPart1, putPart1Size, putPart2, putPart2Size);
         fclose(fileList);
-        pthread_mutex_unlock(&fileListMutex);
+        printf("File %s added to fileList\n", putFileName);
         close(sock);
         free(socket_desc);
         return NULL;
